@@ -568,6 +568,12 @@ namespace openMVG {
                 largestConnectedGraph = connectedComponents[idxMaxNumberOfNodes];
             }
 
+            std::cout << "\n largestConnectedGraph: \n";
+
+            for (const auto& element : largestConnectedGraph) {
+                std::cout << element.first.first << " " << element.first.second << std::endl;
+            }
+
             ///
 
             // PageRank algorithm
@@ -592,11 +598,10 @@ namespace openMVG {
             for (int i = 0; i < edges.outerSize(); ++i) {
                 for (Eigen::SparseMatrix<openMVG::IndexT>::InnerIterator it(edges, i); it; ++it) {
                     totalWeight[i] += it.value();
-                    outDegree[i]++; // each non-zero element is an edge                    
+                    outDegree[i]++; // each non-zero element is an edge  
                 }
             }
 
-            std::cout << "\n filled edges (sparse) Matrix";
 
             // make 3 iterations of the PageRank algorithm
             for (int k = 0; k < 3; k++) {
@@ -604,14 +609,22 @@ namespace openMVG {
                 // Update the graph using the push style algorithm.
                 std::vector<double> next(n_nodes_, (1.0) / (double)n_nodes_);
 
+                std::cout << '\n' << "Edges:";
                 for (int i = 0; i < n_nodes_; ++i) {
                     for (int j = 0; j < n_nodes_; j++) {
                         next[j] += (nodes[i] * edges.coeff(i, j)) / (double)(outDegree[i] * totalWeight[i]);
+                        //std::cout << edges.coeff(i, j) << std::endl;
                     }
                 }
                 nodes = next;
             }
             
+            std::cout << "\n Nodes: \n";
+
+            for (const auto& element : nodes) {
+                std::cout << element << std::endl;
+            }
+
             // Find the index of the maximum value in nodes
             auto maxElementIt = std::max_element(nodes.begin(), nodes.end());
                 
@@ -630,6 +643,8 @@ namespace openMVG {
             }
 
             std::cout << "\n found highest value";
+
+            std::cout << "\n initial pair: " << firstIndex << " " << secondIndex << std::endl;
 
             initial_pair.first = firstIndex;
             initial_pair.second = secondIndex;
