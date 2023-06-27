@@ -649,6 +649,8 @@ namespace openMVG {
 
             std::cout << "\n initial pair: " << firstIndex << " " << secondIndex << std::endl;
 
+            std::cout << "\n initial pair: " << firstIndex << " " << secondIndex << std::endl;
+
             initial_pair.first = firstIndex;
             initial_pair.second = secondIndex;
             return true; //in which cases would it fail?
