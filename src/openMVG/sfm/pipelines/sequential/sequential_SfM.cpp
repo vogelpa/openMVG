@@ -527,7 +527,7 @@ namespace openMVG {
                         // Add the image IDs to the visited set
                         visitedImages.insert(imagePair.first);
                         visitedImages.insert(imagePair.second);
-            
+
                         // Iterate over map_Matches
                         for (const auto& matchPair : map_Matches)
                         {
@@ -568,6 +568,12 @@ namespace openMVG {
                 largestConnectedGraph = connectedComponents[idxMaxNumberOfNodes];
             }
 
+            std::cout << "\n largestConnectedGraph: \n";
+
+            for (const auto& element : largestConnectedGraph) {
+                std::cout << element.first.first << " " << element.first.second << std::endl;
+            }
+
             ///
 
             // PageRank algorithm
@@ -576,6 +582,7 @@ namespace openMVG {
             std::vector<double> nodes(n_nodes_, 1.0 / (double)n_nodes_);
             // std::vector<std::vector<openMVG::IndexT>> edges(n_nodes_, std::vector<openMVG::IndexT>(n_nodes_)); // IMPORTANT: change to sparse matrix for optimization! 
             Eigen::SparseMatrix<openMVG::IndexT> edges(n_nodes_, n_nodes_);
+            edges.reserve(n_nodes_ * 40);
 
             for (const auto& matchPair : largestConnectedGraph) {
                 // Extract image pair and set the number of matches in the corresponding matrix element
@@ -583,20 +590,37 @@ namespace openMVG {
                 const auto& matches = matchPair.second;
                 edges.insert(imagePair.first, imagePair.second) = matches.size();
             }
-            std::cout << "\n found largest connected graph";
+
+            std::cout << "\n edges matrix: \n";
+
+            for (int i = 0; i < edges.outerSize(); ++i) {
+                for (Eigen::SparseMatrix<openMVG::IndexT>::InnerIterator it(edges, i); it; ++it) {
+                    std::cout << "Row: " << it.row() << ", Column: " << it.col() << ", Value: " << it.value() << std::endl;
+                }
+            }
 
             edges.makeCompressed();
             std::vector<openMVG::IndexT> totalWeight(n_nodes_, 0);
             std::vector<openMVG::IndexT> outDegree(n_nodes_, 0);
-          
+
             for (int i = 0; i < edges.outerSize(); ++i) {
                 for (Eigen::SparseMatrix<openMVG::IndexT>::InnerIterator it(edges, i); it; ++it) {
                     totalWeight[i] += it.value();
-                    outDegree[i]++; // each non-zero element is an edge                    
+                    outDegree[i]++; // each non-zero element is an edge  
                 }
             }
 
-            std::cout << "\n filled edges (sparse) Matrix";
+            std::cout << "\n totalWeight vector: \n";
+
+            for (const auto& element : totalWeight) {
+                std::cout << element << std::endl;
+            }
+
+            std::cout << "\n outDegree vector: \n";
+
+            for (const auto& element : outDegree) {
+                std::cout << element << std::endl;
+            }
 
             // make 3 iterations of the PageRank algorithm
             for (int k = 0; k < 3; k++) {
@@ -604,17 +628,27 @@ namespace openMVG {
                 // Update the graph using the push style algorithm.
                 std::vector<double> next(n_nodes_, (1.0) / (double)n_nodes_);
 
+                std::cout << '\n' << "Edges:";
                 for (int i = 0; i < n_nodes_; ++i) {
                     for (int j = 0; j < n_nodes_; j++) {
                         next[j] += (nodes[i] * edges.coeff(i, j)) / (double)(outDegree[i] * totalWeight[i]);
+                        //std::cout << edges.coeff(i, j) << std::endl;
                     }
                 }
                 nodes = next;
             }
-            
+
+            std::cout << "\n Nodes: \n";
+
+            for (const auto& element : nodes) {
+                std::cout << element << std::endl;
+            }
+
             // Find the index of the maximum value in nodes
             auto maxElementIt = std::max_element(nodes.begin(), nodes.end());
-                
+            
+            std::cout << "\n found highest value: " << &maxElementIt;
+
             int firstIndex = std::distance(nodes.begin(), maxElementIt);
             int secondIndex = 0;
             // the second image for the initial pair is the one the first one shares the most features with
@@ -629,7 +663,8 @@ namespace openMVG {
                 }
             }
 
-            std::cout << "\n found highest value";
+
+            std::cout << "\n initial pair: " << firstIndex << " " << secondIndex << std::endl;
 
             initial_pair.first = firstIndex;
             initial_pair.second = secondIndex;
