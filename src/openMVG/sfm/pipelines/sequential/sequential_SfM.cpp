@@ -502,6 +502,7 @@ namespace openMVG {
 
                 // Create a new matching for the connected component
                 openMVG::matching::PairWiseMatches connectedMatches;
+                int numberOfNodes = 0;
 
                 while (!stack.empty())
                 {
@@ -509,9 +510,11 @@ namespace openMVG {
                     // Work off the stack
                     openMVG::IndexT imageID = stack.back();
                     stack.pop_back();
+                    numberOfNodes++;
 
                     connectedImages.insert(imageID);
                     remainingImages.erase(imageID);
+
 
                     // Iterate over map_Matches
                     for (const auto& matchPair : map_Matches)
@@ -539,10 +542,15 @@ namespace openMVG {
 
                 // Store the connected component matching
                 connectedComponents.push_back(connectedMatches);
-                graphSizes.push_back(connectedMatches.size());
+                graphSizes.push_back(numberOfNodes);
+
+            }
+            std::cout << "\n graphSizes: ";
+
+            for (const auto& element : graphSizes) {
+                std::cout << element << std::endl;
             }
 
-            std::cout << "\n after connected components loop";
             // find largest amount of nodes
             auto maxNumberOfNodes = std::max_element(graphSizes.begin(), graphSizes.end());
             if (maxNumberOfNodes != graphSizes.end()) {
@@ -646,8 +654,6 @@ namespace openMVG {
                 }
             }
 
-
-            std::cout << "\n initial pair: " << firstIndex << " " << secondIndex << std::endl;
 
             std::cout << "\n initial pair: " << firstIndex << " " << secondIndex << std::endl;
 
