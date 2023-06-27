@@ -451,70 +451,61 @@ namespace openMVG {
             return false;
         }
 
+
+        // Step 1: Check if the graph is disconnected and choose the largest connected subgraph
+        // Step 2: Perform PageRank on the largest connected subgraph
+        // Step 3: Return the imagepair with the first image having the highest centrality in the graph and the second image sharing the msot features with the first one  
+        // images can be understood as nodes of a graph, imagepairs describe edges in the graph and amount of matches are the edge weights
+        // not optimized, parallelization tbd
         bool SequentialSfMReconstructionEngine::PageRankInitialPair(Pair& initial_pair) const
         {
             const openMVG::matching::PairWiseMatches& map_Matches = matches_provider_->pairWise_matches_;
-            openMVG::matching::PairWiseMatches largestConnectedGraph = map_Matches;
+            openMVG::matching::PairWiseMatches largestConnectedSubgraph_Matches; // holds the matches from the largest connected subgraph 
 
-            std::cout << "Map Matches size is: " << map_Matches.size();
-
-
-            /// Find largest connected graph (in case the input graph is disconnected)
+            /// Step 1: Check if the graph is disconnected and choose the largest connected subgraph
 
             // Create a set to store visited image IDs
-            std::unordered_set<openMVG::IndexT> visitedImages;
+            std::unordered_set<openMVG::IndexT> graphNodes;
             // Create a vector of matchings to store the connected components
-            std::vector<openMVG::matching::PairWiseMatches> connectedComponents;
+            std::vector<openMVG::matching::PairWiseMatches> connectedSubgraph;
 
-            // Iterate over the matches between pairs of images
+            // Iterate over all matches
             for (const auto& matchesPair : map_Matches)
             {
                 // Get the pair of image IDs
                 const auto& imagePair = matchesPair.first;
 
-                // Add the image IDs to the visited set
-                visitedImages.insert(imagePair.first);
-                visitedImages.insert(imagePair.second);
+                // Add the image IDs to the graphNodes set
+                graphNodes.insert(imagePair.first);
+                graphNodes.insert(imagePair.second);
             }
 
-            std::cout << "\n after visited images";
+            // Separate the connected graphs into seperate matchings
+            std::unordered_set<openMVG::IndexT> remainingNodes(graphNodes); // keeps track of which nodes we still have to visit
+            std::vector<openMVG::IndexT> subgraphSizes; // keeps track of the sizes of the subgraphs
 
-            // Separate the connected components into individual matchings
-            std::unordered_set<openMVG::IndexT> remainingImages(visitedImages);
-            std::vector<openMVG::IndexT> graphSizes;
-
-            while (!remainingImages.empty())
+            while (!remainingNodes.empty())
             {
-                std::cout << "\n remaining images: \n";
-
-                for (const auto& element : remainingImages) {
-                    std::cout << element << std::endl;
-                }
-
                 // Get the next unvisited image ID
-                openMVG::IndexT startImageID = *remainingImages.begin();
+                openMVG::IndexT startNode = *remainingNodes.begin();
 
-                // Perform depth-first search to find connected images
-                std::unordered_set<openMVG::IndexT> connectedImages;
-                std::vector<openMVG::IndexT> stack;
+                // Perform depth-first search to find connected nodes
+                std::unordered_set<openMVG::IndexT> connectedNodes;
+                std::vector<openMVG::IndexT> stack; 
 
-                stack.push_back(startImageID);
+                stack.push_back(startNode);
 
                 // Create a new matching for the connected component
                 openMVG::matching::PairWiseMatches connectedMatches;
-                int numberOfNodes = 0;
 
                 while (!stack.empty())
                 {
-
                     // Work off the stack
-                    openMVG::IndexT imageID = stack.back();
+                    openMVG::IndexT nodeID = stack.back();
                     stack.pop_back();
-                    numberOfNodes++;
 
-                    connectedImages.insert(imageID);
-                    remainingImages.erase(imageID);
-
+                    connectedNodes.insert(nodeID);
+                    remainingNodes.erase(nodeID);
 
                     // Iterate over map_Matches
                     for (const auto& matchPair : map_Matches)
@@ -522,73 +513,51 @@ namespace openMVG {
                         // Get the pair of image IDs
                         const auto& imagePair = matchPair.first;
 
-                        openMVG::IndexT otherImageID = -1;
-                        if (imagePair.first == imageID) {
-                            otherImageID = imagePair.second;
+                        openMVG::IndexT otherNodeID = -1;
+                        if (imagePair.first == nodeID) {
+                            otherNodeID = imagePair.second;
                         }
-                        else if (imagePair.second == imageID) {
-                            otherImageID = imagePair.first;
+                        else if (imagePair.second == nodeID) {
+                            otherNodeID = imagePair.first;
                         }
 
-                        if (otherImageID != -1 && connectedImages.find(otherImageID) == connectedImages.end() &&
-                            remainingImages.find(otherImageID) != remainingImages.end())
+                        // if the node has not yet been visited we push it onto the stack and add it to the subgraph's matchings
+                        if (otherNodeID != -1 && connectedNodes.find(otherNodeID) == connectedNodes.end() &&
+                            remainingNodes.find(otherNodeID) != remainingNodes.end())
                         {
-                            stack.push_back(otherImageID);
+                            stack.push_back(otherNodeID);
                             connectedMatches.insert(matchPair);
                         }
-                    }
-                
+                    }                
                 }
 
                 // Store the connected component matching
-                connectedComponents.push_back(connectedMatches);
-                graphSizes.push_back(connectedImages.size());
-
-            }
-            std::cout << "\n graphSizes: ";
-
-            for (const auto& element : graphSizes) {
-                std::cout << element << std::endl;
+                connectedSubgraph.push_back(connectedMatches);
+                subgraphSizes.push_back(connectedNodes.size());
             }
 
-            // find largest amount of nodes
-            auto maxNumberOfNodes = std::max_element(graphSizes.begin(), graphSizes.end());
-            if (maxNumberOfNodes != graphSizes.end()) {
-                openMVG::IndexT idxMaxNumberOfNodes = std::distance(graphSizes.begin(), maxNumberOfNodes);
-                // Choose the graph with the most nodes
-                largestConnectedGraph = connectedComponents[idxMaxNumberOfNodes];
-            }
+            // find the largest subgraph (being the one with the most nodes)
+            auto maxNumberOfNodes = std::max_element(subgraphSizes.begin(), subgraphSizes.end());
+            if (maxNumberOfNodes != subgraphSizes.end()) {
+                openMVG::IndexT idxMaxNumberOfNodes = std::distance(subgraphSizes.begin(), maxNumberOfNodes);
+                largestConnectedSubgraph_Matches = connectedSubgraph[idxMaxNumberOfNodes];
+            }          
 
-            std::cout << "\n largestConnectedGraph: \n";
-
-            for (const auto& element : largestConnectedGraph) {
-                std::cout << element.first.first << " " << element.first.second << std::endl;
-            }
-
-            ///
+            /// Step 2: Perform PageRank on the largest connected subgraph
 
             // PageRank algorithm
-            openMVG::IndexT n_nodes_ = visitedImages.size();
-            openMVG::IndexT n_edges_ = largestConnectedGraph.size();
-            std::vector<double> nodes(n_nodes_, 1.0 / (double)n_nodes_);
-            // std::vector<std::vector<openMVG::IndexT>> edges(n_nodes_, std::vector<openMVG::IndexT>(n_nodes_)); // IMPORTANT: change to sparse matrix for optimization! 
+            openMVG::IndexT n_nodes_ = graphNodes.size();
+            openMVG::IndexT n_edges_ = largestConnectedSubgraph_Matches.size();
+            std::vector<double> nodes(n_nodes_, 1.0); // not using 1/n because we don't need a distribution
             Eigen::SparseMatrix<openMVG::IndexT> edges(n_nodes_, n_nodes_);
-            edges.reserve(n_edges_);
+            edges.reserve(n_edges_); // the amount of non-zero entries we'll have in our sparse matrix
 
-            for (const auto& matchPair : largestConnectedGraph) {
-                // Extract image pair and set the number of matches in the corresponding matrix element
+            for (const auto& matchPair : largestConnectedSubgraph_Matches) {
+                // Extract image pair and set the number of matches (edge weight) in the corresponding matrix element
                 const auto& imagePair = matchPair.first;
                 const auto& matches = matchPair.second;
-                edges.insert(imagePair.first, imagePair.second) = matches.size();
-                edges.insert(imagePair.second, imagePair.first) = matches.size();
-            }
-
-            std::cout << "\n edges matrix: \n";
-
-            for (int i = 0; i < edges.outerSize(); ++i) {
-                for (Eigen::SparseMatrix<openMVG::IndexT>::InnerIterator it(edges, i); it; ++it) {
-                    std::cout << "Row: " << it.row() << ", Column: " << it.col() << ", Value: " << it.value() << std::endl;
-                }
+                edges.insert(imagePair.first, imagePair.second) = matches.size(); 
+                edges.insert(imagePair.second, imagePair.first) = matches.size(); // since it is an undirected graph we enter the weights in both directions
             }
 
             edges.makeCompressed();
@@ -602,48 +571,25 @@ namespace openMVG {
                 }
             }
 
-            std::cout << "\n totalWeight vector: \n";
-
-            for (const auto& element : totalWeight) {
-                std::cout << element << std::endl;
-            }
-
-            std::cout << "\n outDegree vector: \n";
-
-            for (const auto& element : outDegree) {
-                std::cout << element << std::endl;
-            }
-
-            // make 3 iterations of the PageRank algorithm
+            // perform 3 iterations of the PageRank algorithm using the push style to update the nodes values
             for (int k = 0; k < 3; k++) {
-                std::cout << '\n' << k + 1 << "ths page rank iteration";
-                // Update the graph using the push style algorithm.
                 std::vector<double> next(n_nodes_, 1.0);
 
-                std::cout << '\n' << "Edges:";
                 for (int i = 0; i < n_nodes_; ++i) {
                     for (int j = 0; j < n_nodes_; j++) {
                         if(outDegree[i] * totalWeight[i] != 0) next[j] += (nodes[i] * edges.coeff(i, j)) / (double)(outDegree[i] * totalWeight[i]);
-                        //std::cout << edges.coeff(i, j) << std::endl;
                     }
                 }
                 nodes = next;
             }
 
-            std::cout << "\n Nodes: \n";
-
-            for (const auto& element : nodes) {
-                std::cout << element << std::endl;
-            }
+            /// Step 3: Return the imagepair with the first image having the highest centrality in the graph and the second image sharing the msot features with the first one  
 
             // Find the index of the maximum value in nodes
             auto maxElementIt = std::max_element(nodes.begin(), nodes.end());
             
-            std::cout << "\n found highest value: " << &maxElementIt;
-
             int firstIndex = std::distance(nodes.begin(), maxElementIt);
-            int secondIndex = 0;
-            // the second image for the initial pair is the one the first one shares the most features with
+            int secondIndex;
             Eigen::SparseVector<openMVG::IndexT> row = edges.row(firstIndex);
             openMVG::IndexT maxSharedFeatures = 0;
             for (Eigen::SparseVector<openMVG::IndexT>::InnerIterator it(row); it; ++it) {
@@ -654,9 +600,6 @@ namespace openMVG {
                     secondIndex = colIndex;
                 }
             }
-
-
-            std::cout << "\n initial pair: " << firstIndex << " " << secondIndex << std::endl;
 
             initial_pair.first = firstIndex;
             initial_pair.second = secondIndex;
