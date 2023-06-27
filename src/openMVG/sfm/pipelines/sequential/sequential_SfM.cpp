@@ -502,7 +502,6 @@ namespace openMVG {
 
                 // Create a new matching for the connected component
                 openMVG::matching::PairWiseMatches connectedMatches;
-                int numberOfNodes = 1;
 
                 while (!stack.empty())
                 {
@@ -511,52 +510,36 @@ namespace openMVG {
                     openMVG::IndexT imageID = stack.back();
                     stack.pop_back();
 
-                    if (connectedImages.find(imageID) != connectedImages.end()) {
-                        continue; // Skip if the image ID is already connected
-                    }
-
                     connectedImages.insert(imageID);
                     remainingImages.erase(imageID);
 
-                    // Iterate over the matches between pairs of images
-                    for (const auto& matchesPair : map_Matches)
+                    // Iterate over map_Matches
+                    for (const auto& matchPair : map_Matches)
                     {
                         // Get the pair of image IDs
-                        const auto& imagePair = matchesPair.first;
+                        const auto& imagePair = matchPair.first;
 
-                        // Add the image IDs to the visited set
-                        visitedImages.insert(imagePair.first);
-                        visitedImages.insert(imagePair.second);
+                        openMVG::IndexT otherImageID = -1;
+                        if (imagePair.first == imageID) {
+                            otherImageID = imagePair.second;
+                        }
+                        else if (imagePair.second == imageID) {
+                            otherImageID = imagePair.first;
+                        }
 
-                        // Iterate over map_Matches
-                        for (const auto& matchPair : map_Matches)
+                        if (otherImageID != -1 && connectedImages.find(otherImageID) == connectedImages.end() &&
+                            remainingImages.find(otherImageID) != remainingImages.end())
                         {
-                            // Get the pair of image IDs
-                            const std::pair<openMVG::IndexT, openMVG::IndexT>& imagePair = matchPair.first;
-
-                            openMVG::IndexT otherImageID = -1;
-                            if (imagePair.first == imageID) {
-                                otherImageID = imagePair.second;
-                            }
-                            else if (imagePair.second == imageID) {
-                                otherImageID = imagePair.first;
-                            }
-
-                            if (otherImageID != -1 && connectedImages.find(otherImageID) == connectedImages.end() &&
-                                remainingImages.find(otherImageID) != remainingImages.end())
-                            {
-                                stack.push_back(otherImageID);
-
-                                numberOfNodes++;
-                                connectedMatches.insert(matchPair);
-                            }
+                            stack.push_back(otherImageID);
+                            connectedMatches.insert(matchPair);
                         }
                     }
+                
                 }
 
                 // Store the connected component matching
                 connectedComponents.push_back(connectedMatches);
-                graphSizes.push_back(numberOfNodes);
+                graphSizes.push_back(connectedMatches.size());
             }
 
             std::cout << "\n after connected components loop";
