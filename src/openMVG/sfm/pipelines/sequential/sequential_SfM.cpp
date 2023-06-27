@@ -542,7 +542,7 @@ namespace openMVG {
 
                 // Store the connected component matching
                 connectedComponents.push_back(connectedMatches);
-                graphSizes.push_back(numberOfNodes);
+                graphSizes.push_back(connectedImages.size());
 
             }
             std::cout << "\n graphSizes: ";
@@ -568,18 +568,19 @@ namespace openMVG {
             ///
 
             // PageRank algorithm
-            openMVG::IndexT n_nodes_ = *maxNumberOfNodes;
+            openMVG::IndexT n_nodes_ = visitedImages.size();
             openMVG::IndexT n_edges_ = largestConnectedGraph.size();
             std::vector<double> nodes(n_nodes_, 1.0 / (double)n_nodes_);
             // std::vector<std::vector<openMVG::IndexT>> edges(n_nodes_, std::vector<openMVG::IndexT>(n_nodes_)); // IMPORTANT: change to sparse matrix for optimization! 
             Eigen::SparseMatrix<openMVG::IndexT> edges(n_nodes_, n_nodes_);
-            edges.reserve(n_nodes_ * 40);
+            edges.reserve(n_edges_);
 
             for (const auto& matchPair : largestConnectedGraph) {
                 // Extract image pair and set the number of matches in the corresponding matrix element
                 const auto& imagePair = matchPair.first;
                 const auto& matches = matchPair.second;
                 edges.insert(imagePair.first, imagePair.second) = matches.size();
+                edges.insert(imagePair.second, imagePair.first) = matches.size();
             }
 
             std::cout << "\n edges matrix: \n";
@@ -617,12 +618,12 @@ namespace openMVG {
             for (int k = 0; k < 3; k++) {
                 std::cout << '\n' << k + 1 << "ths page rank iteration";
                 // Update the graph using the push style algorithm.
-                std::vector<double> next(n_nodes_, (1.0) / (double)n_nodes_);
+                std::vector<double> next(n_nodes_, 1.0);
 
                 std::cout << '\n' << "Edges:";
                 for (int i = 0; i < n_nodes_; ++i) {
                     for (int j = 0; j < n_nodes_; j++) {
-                        next[j] += (nodes[i] * edges.coeff(i, j)) / (double)(outDegree[i] * totalWeight[i]);
+                        if(outDegree[i] * totalWeight[i] != 0) next[j] += (nodes[i] * edges.coeff(i, j)) / (double)(outDegree[i] * totalWeight[i]);
                         //std::cout << edges.coeff(i, j) << std::endl;
                     }
                 }
