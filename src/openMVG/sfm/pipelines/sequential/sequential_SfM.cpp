@@ -548,19 +548,26 @@ namespace openMVG {
 
             /// Step 2: Perform PageRank on the largest connected subgraph
 
+            float d = 1.0;// 0.85;
+
+
             // PageRank algorithm
             openMVG::IndexT n_nodes_ = graphNodes.size();
             openMVG::IndexT n_edges_ = largestConnectedSubgraph_Matches.size();
-            std::vector<double> nodes(n_nodes_, 1.0); // not using 1/n because we don't need a distribution
+            std::vector<double> nodes(n_nodes_, 1.0);// (1.0 - d) / *maxNumberOfNodes); // not using 1/n because we don't need a distribution
             Eigen::SparseMatrix<openMVG::IndexT> edges(n_nodes_, n_nodes_);
+            Eigen::SparseMatrix<openMVG::IndexT> weights(n_nodes_, n_nodes_);
+
             edges.reserve(n_edges_); // the amount of non-zero entries we'll have in our sparse matrix
 
             for (const auto& matchPair : largestConnectedSubgraph_Matches) {
                 // Extract image pair and set the number of matches (edge weight) in the corresponding matrix element
                 const auto& imagePair = matchPair.first;
                 const auto& matches = matchPair.second;
-                edges.insert(imagePair.first, imagePair.second) = matches.size();
-                edges.insert(imagePair.second, imagePair.first) = matches.size(); // since it is an undirected graph we enter the weights in both directions
+                weights.insert(imagePair.first, imagePair.second) = matches.size();// matches.size();
+                weights.insert(imagePair.second, imagePair.first) = matches.size();
+                edges.insert(imagePair.first, imagePair.second) = 1.0;// matches.size();
+                edges.insert(imagePair.second, imagePair.first) = 1.0;// matches.size(); // since it is an undirected graph we enter the weights in both directions
             }
 
             edges.makeCompressed();
@@ -574,13 +581,15 @@ namespace openMVG {
                 }
             }
 
+            //* totalWeight[i] 
+
             // perform 3 iterations of the PageRank algorithm using the push style to update the nodes values
-            for (int k = 0; k < 100; k++) {
-                std::vector<double> next(n_nodes_, 1.0);
+            for (int k = 0; k < 15; k++) {
+                std::vector<double> next(n_nodes_, 1.0);// (1.0 - d) / *maxNumberOfNodes);
 
                 for (int i = 0; i < n_nodes_; ++i) {
                     for (int j = 0; j < n_nodes_; j++) {
-                        if (outDegree[i] * totalWeight[i] != 0) next[j] += (nodes[i] * edges.coeff(i, j)) / (double)(outDegree[i] * totalWeight[i]);
+                        if (outDegree[i] != 0) next[j] += d * (nodes[i] * edges.coeff(i, j)) / (double)(outDegree[i]);// *totalWeight[i]);
                     }
                 }
                 nodes = next;
@@ -589,7 +598,7 @@ namespace openMVG {
             OPENMVG_LOG_INFO << "\n Nodes vector:";
 
             for (auto& j : nodes) {
-                OPENMVG_LOG_INFO << j.
+                OPENMVG_LOG_INFO << j;
             }
 
             /// Step 3: Return the imagepair with the first image having the highest centrality in the graph and the second image sharing the msot features with the first one  
@@ -599,11 +608,13 @@ namespace openMVG {
 
             int firstIndex = std::distance(nodes.begin(), maxElementIt);
             int secondIndex;
-            Eigen::SparseVector<openMVG::IndexT> row = edges.row(firstIndex);
+            Eigen::SparseVector<openMVG::IndexT> row = weights.row(firstIndex);
             openMVG::IndexT maxSharedFeatures = 0;
             for (Eigen::SparseVector<openMVG::IndexT>::InnerIterator it(row); it; ++it) {
                 int colIndex = it.index();
                 openMVG::IndexT value = it.value();
+
+                OPENMVG_LOG_INFO << it.value();
                 if (value > maxSharedFeatures) {
                     maxSharedFeatures = value;
                     secondIndex = colIndex;
